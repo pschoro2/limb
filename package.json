@@ -1,0 +1,20 @@
+{
+  "name": "limb-visual-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "test:ui": "playwright test",
+    "test:learning": "node --test tests/ui/*.test.js",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.17.3",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "vite": "^7.0.0"
+  }
+}

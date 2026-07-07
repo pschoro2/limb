@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js physics - rapier3d character controller</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+		<meta property="og:title" content="three.js physics - rapier3d character controller">
+		<meta property="og:type" content="website">
+		<meta property="og:url" content="https://threejs.org/examples/physics_rapier_character_controller.html">
+		<meta property="og:image" content="https://threejs.org/examples/screenshots/physics_rapier_character_controller.jpg">
+		<script type="importmap">
+			{
+				"imports": {
+					"https://cdn.skypack.dev/@dimforge/rapier3d-compat@0.17.3": "/node_modules/@dimforge/rapier3d-compat/rapier.es.js"
+				}
+			}
+		</script>
+		<style>
+			:root {
+				color-scheme: dark;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			html,
+			body {
+				margin: 0;
+				width: 100%;
+				height: 100%;
+			}
+
+			body {
+				overflow: hidden;
+				background: #0e1117;
+				font-family: system-ui, sans-serif;
+			}
+
+			#app {
+				width: 100%;
+				height: 100%;
+			}
+
+				#view-stage {
+					position: relative;
+					width: 100%;
+					height: 100%;
+				}
+
+				#world-view {
+					position: absolute;
+					inset: 0;
+					display: block;
+					background: #11161c;
+				}
+
+				#fps-view {
+					position: absolute;
+					inset: 0;
+					display: none;
+				}
+
+				#yolo-overlay {
+					position: absolute;
+					inset: 0;
+					pointer-events: none;
+					display: none;
+					z-index: 2;
+				}
+
+				#mode-hint {
+					position: absolute;
+					left: 0;
+					top: 0;
+					z-index: 2;
+					width: 100%;
+					padding: 8px 10px;
+					font-size: 12px;
+					line-height: 1.35;
+					background: rgba(0, 0, 0, 0.4);
+					color: #dbe7f1;
+					pointer-events: none;
+				}
+
+				#mode-meta {
+					position: absolute;
+					left: 0;
+					top: 74px;
+					z-index: 2;
+					width: 100%;
+					padding: 8px 10px;
+					font-size: 12px;
+					line-height: 1.35;
+					background: rgba(0, 0, 0, 0.28);
+					color: #9fb1c1;
+					pointer-events: none;
+				}
+
+					#mode-toggle {
+						border: 1px solid rgba(255, 255, 255, 0.2);
+						background: rgba(0, 0, 0, 0.4);
+						color: #dbe7f1;
+						padding: 6px 10px;
+						font-size: 12px;
+						cursor: pointer;
+						width: 100%;
+						margin-bottom: 8px;
+					}
+
+					#side-controls {
+						position: absolute;
+						right: 10px;
+						top: 10px;
+						z-index: 4;
+						width: 205px;
+						padding: 8px;
+						background: rgba(0, 0, 0, 0.35);
+						border: 1px solid rgba(255, 255, 255, 0.16);
+						color: #dbe7f1;
+						font-size: 12px;
+						line-height: 1.3;
+					}
+
+					#side-controls label {
+						display: flex;
+						align-items: center;
+						gap: 8px;
+						margin-bottom: 8px;
+					}
+
+					#side-controls .param {
+						margin-bottom: 8px;
+					}
+
+					#side-controls .param label {
+						justify-content: space-between;
+						font-size: 11px;
+						text-transform: uppercase;
+						letter-spacing: 0.03em;
+					}
+
+					#side-controls .param .value {
+						font-size: 11px;
+						color: #9fd7ff;
+					}
+
+					#side-controls input[type="range"] {
+						width: 100%;
+					}
+
+					#side-controls button {
+						border: 1px solid rgba(255, 255, 255, 0.2);
+						background: rgba(0, 0, 0, 0.4);
+						color: #dbe7f1;
+						padding: 6px 10px;
+						font-size: 12px;
+						cursor: pointer;
+						width: 100%;
+						margin-bottom: 8px;
+					}
+
+					#shadow-toggle {
+						accent-color: #0fe;
+						width: 14px;
+						height: 14px;
+					}
+
+					#rain-shot {
+						border: 1px solid rgba(255, 255, 255, 0.2);
+						background: rgba(0, 0, 0, 0.4);
+						color: #dbe7f1;
+						padding: 6px 10px;
+						font-size: 12px;
+						cursor: pointer;
+					}
+
+				#eye-state {
+					position: absolute;
+					right: 10px;
+					top: 45px;
+					padding: 8px 10px;
+					background: rgba(0, 0, 0, 0.4);
+					color: #dbe7f1;
+				font-size: 12px;
+				z-index: 2;
+				pointer-events: none;
+				border: 1px solid rgba(255, 255, 255, 0.1);
+				min-width: 190px;
+			}
+
+			#crosshair {
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				width: 18px;
+				height: 18px;
+				margin-left: -9px;
+				margin-top: -9px;
+				border: 1px solid rgba(255, 255, 255, 0.72);
+				border-radius: 50%;
+				z-index: 2;
+				pointer-events: none;
+			}
+
+			#crosshair::before,
+			#crosshair::after {
+				content: '';
+				position: absolute;
+				background: rgba(255, 255, 255, 0.72);
+				left: 50%;
+				top: 50%;
+			}
+
+			#crosshair::before {
+				width: 1px;
+				height: 7px;
+				transform: translate(-50%, -50%);
+			}
+
+			#crosshair::after {
+				width: 7px;
+				height: 1px;
+				transform: translate(-50%, -50%);
+			}
+
+				</style>
+		</head>
+		<body>
+			<div id="app">
+				<div id="view-stage">
+						<canvas id="world-view"></canvas>
+						<canvas id="fps-view"></canvas>
+						<canvas id="yolo-overlay"></canvas>
+						<div id="side-controls">
+							<button id="mode-toggle" type="button">Switch to External Camera</button>
+							<label>
+								<input id="shadow-toggle" type="checkbox" checked />
+								Shadow ON/OFF
+							</label>
+							<div class="param">
+								<label>
+									<span>Camera FOV</span>
+									<span id="fov-value" class="value">99°</span>
+								</label>
+								<input id="fov-slider" type="range" min="35" max="140" step="1" value="99" />
+							</div>
+							<div class="param">
+								<label>
+									<span>Distance to character</span>
+									<span id="camera-distance-value" class="value">6.00m</span>
+								</label>
+								<input id="camera-distance-slider" type="range" min="1" max="15" step="0.05" value="6" />
+							</div>
+							<div class="param">
+								<label>
+									<span>YOLO eye distance</span>
+									<span id="yolo-eye-distance-value" class="value">0.21m</span>
+								</label>
+								<input id="yolo-eye-distance-slider" type="range" min="0.02" max="1.5" step="0.01" value="0.21" />
+							</div>
+							<button id="rain-shot" type="button">One-shot rain (100 balls)</button>
+						</div>
+						<div id="crosshair"></div>
+						<div id="eye-state">YOLO Eye: IJKL rotate, U/O translate X, Y/H translate Y, N/M translate Z</div>
+						<div id="mode-hint">
+							<b>Movement:</b> Z/Q/S/D (AZERTY) or Arrow keys
+						</div>
+					<div id="mode-meta"></div>
+				</div>
+			</div>
+
+		<script type="module">
+
+			import * as THREE from 'three';
+			import { RapierPhysics } from 'three/examples/jsm/physics/RapierPhysics.js';
+			import { RapierHelper } from 'three/examples/jsm/helpers/RapierHelper.js';
+
+				const app = document.querySelector( '#app' );
+				const worldCanvas = document.querySelector( '#world-view' );
+				const fpsCanvas = document.querySelector( '#fps-view' );
+				const yoloCanvas = document.querySelector( '#yolo-overlay' );
+				const yoloCtx = yoloCanvas.getContext( '2d' );
+				const eyeState = document.querySelector( '#eye-state' );
+					const modeMeta = document.querySelector( '#mode-meta' );
+					const modeHint = document.querySelector( '#mode-hint' );
+					const modeToggle = document.querySelector( '#mode-toggle' );
+					const crosshair = document.querySelector( '#crosshair' );
+					const shadowToggle = document.querySelector( '#shadow-toggle' );
+					const rainButton = document.querySelector( '#rain-shot' );
+					const fovSlider = document.querySelector( '#fov-slider' );
+					const fovValue = document.querySelector( '#fov-value' );
+					const cameraDistanceSlider = document.querySelector( '#camera-distance-slider' );
+					const cameraDistanceValue = document.querySelector( '#camera-distance-value' );
+					const yoloEyeDistanceSlider = document.querySelector( '#yolo-eye-distance-slider' );
+					const yoloEyeDistanceValue = document.querySelector( '#yolo-eye-distance-value' );
+
+					let worldCamera, fpsCamera, scene, worldRenderer, fpsRenderer, stats, physics, characterController, physicsHelper;
+					let mainLight;
+					let player, movement;
+					let eyeRig, eyeYawNode, eyePitchNode, eyeCamera, eyeOffset;
+					let eyeYaw = 0;
+				let eyePitch = 0.26;
+				let eyeAxis = {
+					x: 0.08,
+					y: 0.87,
+					z: -0.21,
+				};
+				const mouseLook = new THREE.Vector2();
+					let cameraMode = 'fps';
+					let shadowsEnabled = true;
+					let cameraDistance = Number( cameraDistanceSlider?.value || 6 );
+					let yoloEyeDistance = Number( yoloEyeDistanceSlider?.value || Math.abs( eyeAxis.z ) || 0.21 );
+					let cameraYaw = 0;
+					let cameraPitch = 0.25;
+					let isFreeLooking = false;
+			const detectables = [];
+			const statsText = [];
+			const movementInputs = { forward: 0, right: 0 };
+			const eyeInputs = {
+				yawLeft: 0,
+				yawRight: 0,
+				pitchUp: 0,
+				pitchDown: 0,
+				xPlus: 0,
+				xMinus: 0,
+				yPlus: 0,
+				yMinus: 0,
+				zPlus: 0,
+				zMinus: 0,
+			};
+			const worldCorner = new THREE.Vector3();
+			const worldMin = new THREE.Vector3();
+			const worldMax = new THREE.Vector3();
+			const projVec = new THREE.Vector3();
+			const bounds = new THREE.Box3();
+			const tempVec = new THREE.Vector3();
+			const tempProj = new THREE.Vector3();
+			const tempTarget = new THREE.Vector3();
+			const tempNormal = new THREE.Vector3();
+
+			init();
+
+			async function init() {
+
+				scene = new THREE.Scene();
+				scene.background = new THREE.Color( 0xbfd1e5 );
+
+				worldCamera = new THREE.PerspectiveCamera( Number( fovSlider?.value || 99 ), 1, 0.1, 100 );
+				worldCamera.position.set( 2, 4, 6 );
+
+					fpsCamera = new THREE.PerspectiveCamera( Number( fovSlider?.value || 99 ), 1, 0.05, 80 );
+				fpsCamera.near = 0.05;
+				fpsCamera.far = 80;
+
+				const ambient = new THREE.HemisphereLight( 0x555555, 0xFFFFFF, 0.75 );
+				scene.add( ambient );
+
+					const light = new THREE.DirectionalLight( 0xffffff, 3 );
+					mainLight = light;
+					mainLight.position.set( 0, 12.5, 12.5 );
+					mainLight.castShadow = true;
+					mainLight.shadow.radius = 3;
+					mainLight.shadow.blurSamples = 8;
+					mainLight.shadow.mapSize.width = 1024;
+					mainLight.shadow.mapSize.height = 1024;
+
+				const size = 10;
+					mainLight.shadow.camera.left = - size;
+					mainLight.shadow.camera.bottom = - size;
+					mainLight.shadow.camera.right = size;
+					mainLight.shadow.camera.top = size;
+					mainLight.shadow.camera.near = 1;
+					mainLight.shadow.camera.far = 50;
+					scene.add( mainLight );
+
+					worldRenderer = new THREE.WebGLRenderer( { canvas: worldCanvas, antialias: true } );
+					worldRenderer.setPixelRatio( Math.min( window.devicePixelRatio, 2 ) );
+					worldRenderer.shadowMap.enabled = true;
+
+				fpsRenderer = new THREE.WebGLRenderer( { canvas: fpsCanvas, antialias: true } );
+				fpsRenderer.setPixelRatio( Math.min( window.devicePixelRatio, 2 ) );
+				fpsRenderer.shadowMap.enabled = true;
+
+					const geometry = new THREE.BoxGeometry( 20, 0.5, 20 );
+					const material = new THREE.MeshStandardMaterial( { color: 0xFFFFFF } );
+
+					const ground = new THREE.Mesh( geometry, material );
+					applyShadowState( ground, false, true );
+					ground.position.y = - 0.25;
+					ground.userData.physics = { mass: 0 };
+					scene.add( ground );
+
+				new THREE.TextureLoader().load( './textures/grid.png', function ( texture ) {
+					texture.wrapS = THREE.RepeatWrapping;
+					texture.wrapT = THREE.RepeatWrapping;
+					texture.repeat.set( 20, 20 );
+					ground.material.map = texture;
+					ground.material.needsUpdate = true;
+				} );
+
+				for ( let i = 0; i < 10; i ++ ) addBody( Math.random() > 0.7 );
+
+				stats = { label: 'ready' };
+
+				movementInputs.forward = 0;
+				movementInputs.right = 0;
+
+					window.addEventListener( 'keydown', onKeyDown );
+					window.addEventListener( 'keyup', onKeyUp );
+					window.addEventListener( 'resize', onWindowResize, false );
+						modeToggle.addEventListener( 'click', () => {
+							setCameraMode( cameraMode === 'fps' ? 'world' : 'fps' );
+						} );
+						shadowToggle.addEventListener( 'change', ( event ) => {
+							setShadowsEnabled( event.target.checked );
+						} );
+						fovSlider.addEventListener( 'input', ( event ) => {
+							setCameraFov( Number( event.target.value ) );
+						} );
+						cameraDistanceSlider.addEventListener( 'input', ( event ) => {
+							setExternalCameraDistance( Number( event.target.value ) );
+						} );
+						cameraDistanceSlider.addEventListener( 'change', ( event ) => {
+							setExternalCameraDistance( Number( event.target.value ) );
+						} );
+						yoloEyeDistanceSlider.addEventListener( 'input', ( event ) => {
+							setYoloEyeDistance( Number( event.target.value ) );
+						} );
+						yoloEyeDistanceSlider.addEventListener( 'change', ( event ) => {
+							setYoloEyeDistance( Number( event.target.value ) );
+						} );
+						rainButton.addEventListener( 'click', () => {
+							spawnRainOfBalls();
+						} );
+						for ( const canvas of [ worldCanvas, fpsCanvas ] ) {
+							canvas.addEventListener( 'pointerdown', onFreelookPointerDown );
+							canvas.addEventListener( 'pointerup', onFreelookPointerUp );
+							canvas.addEventListener( 'pointermove', onFreelookPointerMove );
+							canvas.addEventListener( 'pointerleave', onFreelookPointerUp );
+							canvas.addEventListener( 'contextmenu', ( event ) => {
+								event.preventDefault();
+							} );
+						}
+
+						await initPhysics();
+						worldRenderer.setAnimationLoop( animate );
+						setShadowsEnabled( shadowsEnabled );
+						setCameraFov( Number( fovSlider?.value || 99 ) );
+						setExternalCameraDistance( cameraDistance );
+						setYoloEyeDistance( yoloEyeDistance );
+						setCameraMode( cameraMode );
+						onWindowResize();
+
+				}
+
+				function onKeyDown( event ) {
+
+					if ( event.key === 'v' || event.key === 'V' ) {
+						setCameraMode( cameraMode === 'fps' ? 'world' : 'fps' );
+						return;
+					}
+
+					if ( event.key === 'z' || event.key === 'Z' || event.key === 'ArrowUp' ) movementInputs.forward = 1;
+					if ( event.key === 's' || event.key === 'S' || event.key === 'ArrowDown' ) movementInputs.forward = - 1;
+					if ( event.key === 'q' || event.key === 'Q' || event.key === 'ArrowLeft' ) movementInputs.right = - 1;
+				if ( event.key === 'd' || event.key === 'D' || event.key === 'ArrowRight' ) movementInputs.right = 1;
+
+				if ( event.key === 'j' || event.key === 'J' ) eyeInputs.yawLeft = 1;
+				if ( event.key === 'l' || event.key === 'L' ) eyeInputs.yawRight = 1;
+				if ( event.key === 'i' || event.key === 'I' ) eyeInputs.pitchUp = 1;
+				if ( event.key === 'k' || event.key === 'K' ) eyeInputs.pitchDown = 1;
+				if ( event.key === 'u' || event.key === 'U' ) eyeInputs.xMinus = 1;
+				if ( event.key === 'o' || event.key === 'O' ) eyeInputs.xPlus = 1;
+				if ( event.key === 'y' || event.key === 'Y' ) eyeInputs.yPlus = 1;
+				if ( event.key === 'h' || event.key === 'H' ) eyeInputs.yMinus = 1;
+				if ( event.key === 'n' || event.key === 'N' ) eyeInputs.zPlus = 1;
+				if ( event.key === 'm' || event.key === 'M' ) eyeInputs.zMinus = 1;
+
+			}
+
+			function onKeyUp( event ) {
+
+				if ( event.key === 'z' || event.key === 'Z' || event.key === 'ArrowUp' ) movementInputs.forward = 0;
+				if ( event.key === 's' || event.key === 'S' || event.key === 'ArrowDown' ) movementInputs.forward = 0;
+				if ( event.key === 'q' || event.key === 'Q' || event.key === 'ArrowLeft' ) movementInputs.right = 0;
+				if ( event.key === 'd' || event.key === 'D' || event.key === 'ArrowRight' ) movementInputs.right = 0;
+
+				if ( event.key === 'j' || event.key === 'J' ) eyeInputs.yawLeft = 0;
+				if ( event.key === 'l' || event.key === 'L' ) eyeInputs.yawRight = 0;
+				if ( event.key === 'i' || event.key === 'I' ) eyeInputs.pitchUp = 0;
+				if ( event.key === 'k' || event.key === 'K' ) eyeInputs.pitchDown = 0;
+				if ( event.key === 'u' || event.key === 'U' ) eyeInputs.xMinus = 0;
+				if ( event.key === 'o' || event.key === 'O' ) eyeInputs.xPlus = 0;
+				if ( event.key === 'y' || event.key === 'Y' ) eyeInputs.yPlus = 0;
+				if ( event.key === 'h' || event.key === 'H' ) eyeInputs.yMinus = 0;
+				if ( event.key === 'n' || event.key === 'N' ) eyeInputs.zPlus = 0;
+				if ( event.key === 'm' || event.key === 'M' ) eyeInputs.zMinus = 0;
+
+			}
+
+				function onFreelookPointerDown( event ) {
+
+					isFreeLooking = true;
+					if ( event.currentTarget && event.pointerId !== undefined ) {
+
+						event.currentTarget.setPointerCapture( event.pointerId );
+
+					}
+					mouseLook.set( event.clientX, event.clientY );
+					event.preventDefault();
+
+				}
+
+				function onFreelookPointerUp( event ) {
+
+					isFreeLooking = false;
+					if ( event.currentTarget && event.pointerId !== undefined && event.currentTarget.hasPointerCapture( event.pointerId ) ) {
+
+						event.currentTarget.releasePointerCapture( event.pointerId );
+
+					}
+
+				}
+
+				function onFreelookPointerMove( event ) {
+
+					if ( ! isFreeLooking ) {
+
+						return;
+
+					}
+
+					const deltaX = event.movementX || ( event.clientX - mouseLook.x );
+					const deltaY = event.movementY || ( event.clientY - mouseLook.y );
+					mouseLook.set( event.clientX, event.clientY );
+
+					const lookSpeed = 0.003;
+					if ( cameraMode === 'world' ) {
+
+						cameraYaw -= deltaX * lookSpeed;
+						cameraPitch -= deltaY * lookSpeed;
+						cameraYaw = THREE.MathUtils.clamp( cameraYaw, - Math.PI / 2, Math.PI / 2 );
+						cameraPitch = THREE.MathUtils.clamp( cameraPitch, - Math.PI / 2, Math.PI / 2 );
+
+					} else {
+
+						eyeYaw -= deltaX * lookSpeed;
+						eyePitch -= deltaY * lookSpeed;
+						eyeYaw = THREE.MathUtils.clamp( eyeYaw, - Math.PI / 2, Math.PI / 2 );
+						eyePitch = THREE.MathUtils.clamp( eyePitch, - Math.PI / 2, Math.PI / 2 );
+
+					}
+
+					event.preventDefault();
+
+				}
+
+				function setCameraFov( fov ) {
+
+					const clamped = THREE.MathUtils.clamp( fov, 35, 140 );
+					if ( worldCamera ) {
+
+						worldCamera.fov = clamped;
+						worldCamera.updateProjectionMatrix();
+
+					}
+
+					if ( fpsCamera ) {
+
+						fpsCamera.fov = clamped;
+						fpsCamera.updateProjectionMatrix();
+
+					}
+
+					if ( fovValue ) {
+
+						fovValue.textContent = `${ clamped.toFixed( 0 ) }°`;
+
+					}
+
+					if ( fovSlider ) {
+
+						fovSlider.value = clamped;
+
+					}
+
+				}
+
+				function setExternalCameraDistance( distance ) {
+
+					const minDistance = cameraDistanceSlider ? Number( cameraDistanceSlider.min ) : 1;
+					const maxDistance = cameraDistanceSlider ? Number( cameraDistanceSlider.max ) : 15;
+					cameraDistance = THREE.MathUtils.clamp( distance, minDistance, maxDistance );
+					if ( cameraDistanceValue ) {
+
+						cameraDistanceValue.textContent = `${ cameraDistance.toFixed( 2 ) }m`;
+
+					}
+					if ( cameraDistanceSlider ) {
+
+						cameraDistanceSlider.value = cameraDistance;
+
+					}
+					updateExternalCamera();
+
+				}
+
+				function updateExternalCamera() {
+
+					if ( ! player || ! worldCamera ) {
+
+						return;
+
+					}
+
+					const horizontal = Math.cos( cameraPitch );
+					const target = tempVec;
+					target.set(
+						player.position.x,
+						player.position.y + 0.9,
+						player.position.z
+					);
+					worldCamera.position.set(
+						target.x + Math.sin( cameraYaw ) * horizontal * cameraDistance,
+						target.y + Math.sin( cameraPitch ) * cameraDistance,
+						target.z + Math.cos( cameraYaw ) * horizontal * cameraDistance
+					);
+					worldCamera.lookAt( target );
+
+				}
+
+				function syncExternalCameraDistanceFromSlider() {
+
+					if ( ! cameraDistanceSlider || cameraMode === 'fps' ) {
+
+						return;
+
+					}
+
+					const nextDistance = Number( cameraDistanceSlider.value );
+					if ( ! Number.isFinite( nextDistance ) || nextDistance === cameraDistance ) {
+
+						return;
+
+					}
+
+					setExternalCameraDistance( nextDistance );
+
+				}
+
+				function setYoloEyeDistance( distance ) {
+
+					const minDistance = yoloEyeDistanceSlider ? Number( yoloEyeDistanceSlider.min ) : 0.02;
+					const maxDistance = yoloEyeDistanceSlider ? Number( yoloEyeDistanceSlider.max ) : 1.5;
+					const clamped = THREE.MathUtils.clamp( distance, minDistance, maxDistance );
+					yoloEyeDistance = clamped;
+
+					if ( eyeOffset ) {
+
+						eyeOffset.z = - clamped;
+
+					}
+
+					if ( yoloEyeDistanceValue ) {
+
+						yoloEyeDistanceValue.textContent = `${ clamped.toFixed( 2 ) }m`;
+
+					}
+
+					if ( yoloEyeDistanceSlider ) {
+
+						yoloEyeDistanceSlider.value = clamped;
+
+					}
+
+				}
+
+			function random( min, max ) {
+
+				return Math.random() * ( max - min ) + min;
+
+			}
+
+			async function initPhysics() {
+
+				physics = await RapierPhysics();
+				physicsHelper = new RapierHelper( physics.world );
+				physicsHelper.visible = false;
+				scene.add( physicsHelper );
+				physics.addScene( scene );
+				addCharacterController();
+
+			}
+
+				function addCharacterController() {
+
+				const geometry = new THREE.CapsuleGeometry( 0.3, 1, 8, 8 );
+				const material = new THREE.MeshStandardMaterial( { color: 0x0000ff } );
+					player = new THREE.Mesh( geometry, material );
+					applyShadowState( player, true, false );
+					player.position.set( 0, 0.8, 0 );
+					scene.add( player );
+
+				characterController = physics.world.createCharacterController( 0.01 );
+				characterController.setApplyImpulsesToDynamicBodies( true );
+				characterController.setCharacterMass( 3 );
+				const colliderDesc = physics.RAPIER.ColliderDesc.capsule( 0.5, 0.3 ).setTranslation( 0, 0.8, 0 );
+				player.userData.collider = physics.world.createCollider( colliderDesc );
+
+					const eyeSphere = new THREE.Mesh(
+						new THREE.SphereGeometry( 0.05, 10, 8 ),
+						new THREE.MeshStandardMaterial( { color: 0x00ffb4, emissive: 0x003524 } ),
+					);
+					applyShadowState( eyeSphere, false );
+					eyeRig = new THREE.Group();
+					eyeRig.position.set( 0.08, 0.84, -0.21 );
+					player.add( eyeRig );
+
+				eyeYawNode = new THREE.Object3D();
+				eyePitchNode = new THREE.Object3D();
+					eyeCamera = new THREE.PerspectiveCamera( Number( fovSlider?.value || 99 ), 1, 0.05, 80 );
+				eyeYawNode.add( eyePitchNode );
+				eyePitchNode.add( eyeCamera );
+				eyePitchNode.add( eyeSphere );
+				eyeRig.add( eyeYawNode );
+
+				eyeOffset = eyeAxis;
+				eyeYaw = 0;
+				eyePitch = 0.25;
+					eyeYawNode.rotation.set( 0, eyeYaw, 0 );
+					eyePitchNode.rotation.set( eyePitch, 0, 0 );
+					eyeCamera.position.set( 0, 0, 0 );
+					eyeCamera.lookAt( 0, 0.3, -1 );
+					fpsCamera = eyeCamera;
+
+			}
+
+			function addBody( fixed = true ) {
+
+					const geometry = ( fixed ) ? new THREE.BoxGeometry( 1, 1, 1 ) : new THREE.SphereGeometry( 0.25 );
+					const material = new THREE.MeshStandardMaterial( { color: fixed ? 0xFF0000 : 0x00FF00 } );
+					const mesh = new THREE.Mesh( geometry, material );
+					applyShadowState( mesh, true, true );
+					mesh.position.set( random( - 10, 10 ), 0.5, random( - 10, 10 ) );
+					mesh.userData.physics = { mass: fixed ? 0 : 0.5, restitution: fixed ? 0 : 0.3 };
+					scene.add( mesh );
+					detectables.push( mesh );
+
+				}
+
+				function spawnRainOfBalls() {
+
+					for ( let i = 0; i < 100; i ++ ) {
+
+						const geometry = new THREE.SphereGeometry( 0.07, 12, 12 );
+						const material = new THREE.MeshStandardMaterial( { color: 0xffb347 } );
+						const mesh = new THREE.Mesh( geometry, material );
+						applyShadowState( mesh, true, true );
+						mesh.position.set( random( - 10, 10 ), 2, random( - 10, 10 ) );
+						mesh.userData.physics = { mass: 0.4, restitution: 0.25 };
+						if ( physics ) {
+
+							physics.addMesh( mesh, mesh.userData.physics.mass, mesh.userData.physics.restitution );
+
+						}
+						scene.add( mesh );
+						detectables.push( mesh );
+
+					}
+
+				}
+
+				function applyShadowState( object, canCast = true, canReceive = false ) {
+
+					if ( object.isMesh ) {
+
+						object.userData.shadowCast = canCast;
+						object.userData.shadowReceive = canReceive;
+						object.castShadow = canCast && shadowsEnabled;
+						object.receiveShadow = canReceive && shadowsEnabled;
+
+					}
+
+				}
+
+				function setShadowsEnabled( enabled ) {
+
+					shadowsEnabled = enabled;
+					worldRenderer.shadowMap.enabled = enabled;
+					fpsRenderer.shadowMap.enabled = enabled;
+
+					if ( mainLight ) {
+
+						mainLight.castShadow = enabled;
+
+					}
+
+					scene.traverse( ( node ) => {
+
+						if ( node.isMesh ) {
+
+							const canCast = node.userData.shadowCast === undefined ? node.castShadow : node.userData.shadowCast;
+							const canReceive = node.userData.shadowReceive === undefined ? node.receiveShadow : node.userData.shadowReceive;
+							node.userData.shadowCast = canCast;
+							node.userData.shadowReceive = canReceive;
+							node.castShadow = canCast && enabled;
+							node.receiveShadow = canReceive && enabled;
+
+						}
+
+					} );
+					if ( shadowToggle ) {
+
+						shadowToggle.checked = enabled;
+
+					}
+
+				}
+
+				function updateEyeControls( deltaTime ) {
+
+					const rotateSpeed = 1.45;
+					const moveSpeed = 0.22;
+				if ( ! eyeRig || ! eyeOffset || ! eyeYawNode || ! eyePitchNode || ! eyeCamera ) {
+
+					return;
+
+				}
+
+				eyeYaw -= ( eyeInputs.yawRight - eyeInputs.yawLeft ) * rotateSpeed * deltaTime;
+				eyePitch -= ( eyeInputs.pitchDown - eyeInputs.pitchUp ) * rotateSpeed * deltaTime;
+				eyeYaw = THREE.MathUtils.clamp( eyeYaw, - Math.PI / 2, Math.PI / 2 );
+				eyePitch = THREE.MathUtils.clamp( eyePitch, - Math.PI / 2, Math.PI / 2 );
+
+				eyeOffset.x += ( eyeInputs.xPlus - eyeInputs.xMinus ) * moveSpeed * deltaTime;
+				eyeOffset.y += ( eyeInputs.yPlus - eyeInputs.yMinus ) * moveSpeed * deltaTime;
+				eyeOffset.z += ( eyeInputs.zPlus - eyeInputs.zMinus ) * moveSpeed * deltaTime;
+				eyeOffset.x = THREE.MathUtils.clamp( eyeOffset.x, - 0.45, 0.45 );
+				eyeOffset.y = THREE.MathUtils.clamp( eyeOffset.y, 0.4, 1.25 );
+					eyeOffset.z = THREE.MathUtils.clamp( eyeOffset.z, - 0.45, 0.45 );
+
+				eyeRig.position.set( 0.08 + eyeOffset.x, eyeOffset.y, eyeOffset.z );
+				eyeYawNode.rotation.y = eyeYaw;
+				eyePitchNode.rotation.x = eyePitch;
+
+				eyeState.textContent = `YOLO Eye: yaw ${THREE.MathUtils.radToDeg( eyeYaw ).toFixed(1)}°, pitch ${THREE.MathUtils.radToDeg( eyePitch ).toFixed(1)}°, offset (${eyeOffset.x.toFixed(2)}, ${eyeOffset.y.toFixed(2)}, ${eyeOffset.z.toFixed(2)})`;
+
+			}
+
+				function fitCanvases() {
+
+					const rect = app.getBoundingClientRect();
+					resizeRendererToDisplaySize( worldRenderer, rect );
+					resizeRendererToDisplaySize( fpsRenderer, rect );
+					resizeCanvasLikeRenderer( yoloCanvas, rect );
+					worldCamera.aspect = rect.width / rect.height;
+					worldCamera.updateProjectionMatrix();
+					fpsCamera.aspect = rect.width / rect.height;
+					fpsCamera.updateProjectionMatrix();
+
+				}
+
+				function setCameraMode( mode ) {
+
+					cameraMode = mode === 'world' ? 'world' : 'fps';
+					isFreeLooking = false;
+					const isFps = cameraMode === 'fps';
+					const movementLabel = 'Movement: Z/Q/S/D (AZERTY) or Arrow keys.';
+					const viewHint = isFps ? 'Press V for full screen external camera.' : 'Press V for full screen FPS eye view.';
+
+					worldCanvas.style.display = isFps ? 'none' : 'block';
+					fpsCanvas.style.display = isFps ? 'block' : 'none';
+					yoloCanvas.style.display = isFps ? 'block' : 'none';
+					crosshair.style.display = isFps ? 'block' : 'none';
+					eyeState.style.display = isFps ? 'block' : 'none';
+					modeHint.textContent = `${movementLabel} ${viewHint}`;
+
+					modeToggle.textContent = isFps ? 'Switch to External Camera' : 'Switch to FPS View';
+					if ( isFps ) {
+						modeMeta.textContent = 'Mode: FPS eye camera';
+					} else {
+						updateExternalCamera();
+						modeMeta.textContent = 'Mode: External character camera';
+					}
+
+					if ( yoloCtx ) {
+						yoloCtx.clearRect( 0, 0, yoloCanvas.width, yoloCanvas.height );
+					}
+
+				}
+
+			function resizeRendererToDisplaySize( renderer, rect ) {
+
+				const targetWidth = Math.max( 1, Math.floor( rect.width * Math.min( window.devicePixelRatio, 2 ) ) );
+				const targetHeight = Math.max( 1, Math.floor( rect.height * Math.min( window.devicePixelRatio, 2 ) ) );
+
+				if ( renderer.domElement.width !== targetWidth || renderer.domElement.height !== targetHeight ) {
+
+					renderer.setPixelRatio( Math.min( window.devicePixelRatio, 2 ) );
+					renderer.setSize( rect.width, rect.height, false );
+
+				}
+
+			}
+
+			function resizeCanvasLikeRenderer( canvas, rect ) {
+
+				const targetWidth = Math.max( 1, Math.floor( rect.width * Math.min( window.devicePixelRatio, 2 ) ) );
+				const targetHeight = Math.max( 1, Math.floor( rect.height * Math.min( window.devicePixelRatio, 2 ) ) );
+				if ( canvas.width !== targetWidth || canvas.height !== targetHeight ) {
+					canvas.width = targetWidth;
+					canvas.height = targetHeight;
+				}
+
+			}
+
+			function projectBox( bounds, camera, canvasWidth, canvasHeight ) {
+
+				bounds.getCenter( tempTarget );
+				if ( bounds.isEmpty() ) return null;
+
+				let minX = 1;
+				let minY = 1;
+				let maxX = -1;
+				let maxY = -1;
+				let has = false;
+
+				worldMin.copy( bounds.min );
+				worldMax.copy( bounds.max );
+				const xs = [ worldMin.x, worldMax.x ];
+				const ys = [ worldMin.y, worldMax.y ];
+				const zs = [ worldMin.z, worldMax.z ];
+
+				for ( const x of xs ) {
+					for ( const y of ys ) {
+						for ( const z of zs ) {
+							worldCorner.set( x, y, z );
+							worldCorner.project( camera );
+							if ( ! Number.isFinite( worldCorner.x ) || ! Number.isFinite( worldCorner.y ) ) {
+								continue;
+							}
+							if ( worldCorner.z < 0 || worldCorner.z > 1 ) {
+								continue;
+							}
+							minX = Math.min( minX, worldCorner.x );
+							minY = Math.min( minY, worldCorner.y );
+							maxX = Math.max( maxX, worldCorner.x );
+							maxY = Math.max( maxY, worldCorner.y );
+							has = true;
+						}
+					}
+				}
+
+				if ( ! has ) return null;
+
+				const left = ( Math.min( 1, Math.max( -1, minX ) ) + 1 ) * 0.5 * canvasWidth;
+				const right = ( Math.min( 1, Math.max( -1, maxX ) ) + 1 ) * 0.5 * canvasWidth;
+				const top = ( 1 - Math.min( 1, Math.max( -1, maxY ) ) ) * 0.5 * canvasHeight;
+				const bottom = ( 1 - Math.min( 1, Math.max( -1, minY ) ) ) * 0.5 * canvasHeight;
+
+				if ( right <= 0 || bottom <= 0 || left >= canvasWidth || top >= canvasHeight || right - left < 2 || bottom - top < 2 ) {
+					return null;
+				}
+
+				return {
+					x: Math.max( 0, Math.min( canvasWidth, left ) ),
+					y: Math.max( 0, Math.min( canvasHeight, top ) ),
+					w: Math.max( 2, Math.min( canvasWidth, right ) - left ),
+					h: Math.max( 2, Math.min( canvasHeight, bottom ) - top ),
+				};
+
+			}
+
+			function drawYoloOverlay() {
+
+				const width = yoloCanvas.width;
+				const height = yoloCanvas.height;
+				yoloCtx.clearRect( 0, 0, width, height );
+				yoloCtx.font = '12px system-ui, sans-serif';
+				yoloCtx.textBaseline = 'top';
+				let visibleCount = 0;
+
+				for ( const obj of detectables ) {
+					if ( ! obj.visible ) continue;
+					bounds.setFromObject( obj );
+					const frame = projectBox( bounds, fpsCamera, width, height );
+					if ( ! frame ) continue;
+
+					const distance = fpsCamera.position.distanceTo( obj.position );
+					const hue = Math.max( 0, Math.min( 1, 1 - ( distance / 10 ) ) );
+					const c1 = Math.round( 40 + ( 1 - hue ) * 120 );
+					const c2 = Math.round( 180 + hue * 35 );
+					const color = `rgb(255, ${c1}, ${c2})`;
+
+					yoloCtx.strokeStyle = color;
+					yoloCtx.lineWidth = Math.max( 1, yoloCanvas.width / 450 );
+					yoloCtx.strokeRect( frame.x, frame.y, frame.w, frame.h );
+					yoloCtx.fillStyle = 'rgba(0,0,0,0.45)';
+					yoloCtx.fillRect( frame.x, Math.max( 0, frame.y - 16 ), frame.w, 14 );
+					yoloCtx.fillStyle = color;
+					const label = obj.geometry.type === 'SphereGeometry' ? 'ball' : 'box';
+					yoloCtx.fillText( `${label} ${( distance ).toFixed( 1 )}m`, frame.x + 2, Math.max( 0, frame.y - 15 ) );
+					visibleCount ++;
+				}
+
+					modeMeta.textContent = `FPS mode: ${visibleCount} detections`;
+
+			}
+
+			function onWindowResize() {
+
+				fitCanvases();
+
+			}
+
+				function animate() {
+
+				if ( physicsHelper ) physicsHelper.update();
+
+				if ( physics && characterController ) {
+					const deltaTime = 1 / 60;
+					const speed = 2.5 * deltaTime;
+					const moveVector = new physics.RAPIER.Vector3( movementInputs.right * speed, 0, - movementInputs.forward * speed );
+					characterController.computeColliderMovement( player.userData.collider, moveVector );
+					const translation = characterController.computedMovement();
+					const position = player.userData.collider.translation();
+					position.x += translation.x;
+					position.y += translation.y;
+					position.z += translation.z;
+					player.userData.collider.setTranslation( position );
+					player.position.set( position.x, position.y, position.z );
+				}
+
+					eyeCamera?.updateMatrixWorld( true );
+					updateEyeControls( 1 / 60 );
+
+				if ( cameraMode === 'fps' ) {
+
+					fpsRenderer.render( scene, fpsCamera );
+					drawYoloOverlay();
+
+				} else {
+
+						syncExternalCameraDistanceFromSlider();
+					updateExternalCamera();
+					worldRenderer.render( scene, worldCamera );
+
+				}
+
+				}
+
+		</script>
+	</body>
+</html>

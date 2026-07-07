@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Limb Visual Simulator</title>
+  </head>
+  <body>
+    <div id="app">
+        <main class="workspace">
+          <section class="stage" aria-label="3D limb simulator">
+            <canvas id="scene"></canvas>
+            <div id="vision-rig" class="vision-rig" aria-label="Scene-backed stereo YOLO eyesight">
+            <div class="eye-panel" id="left-eye">
+              <div class="eye-header">
+                <span>YOLO L</span>
+                <strong id="left-eye-depth">0.00m</strong>
+              </div>
+              <div class="eye-frame">
+                <canvas class="eye-view" id="left-eye-view"></canvas>
+                <div class="scanline"></div>
+                <div class="box" id="left-eye-box"></div>
+              </div>
+              <div class="eye-meta" id="left-eye-meta">no object</div>
+            </div>
+            <div class="eye-panel" id="right-eye">
+              <div class="eye-header">
+                <span>YOLO R</span>
+                <strong id="right-eye-depth">0.00m</strong>
+              </div>
+              <div class="eye-frame">
+                <canvas class="eye-view" id="right-eye-view"></canvas>
+                <div class="scanline"></div>
+                <div class="box" id="right-eye-box"></div>
+              </div>
+              <div class="eye-meta" id="right-eye-meta">no object</div>
+            </div>
+          </div>
+          <div class="status-strip">
+            <span id="status-action">HOLD</span>
+            <span id="status-reason">Select an object and move it toward the limb.</span>
+          </div>
+        </section>
+        <aside class="control-panel" aria-label="Object and memory state">
+          <div>
+            <h1>Limb Memory</h1>
+            <p id="selected-label">Object: none</p>
+          </div>
+          <div class="legend">
+            <div><span class="dot safe"></span>safe approach</div>
+            <div><span class="dot danger"></span>withdraw</div>
+            <div><span class="dot unknown"></span>probe</div>
+          </div>
+          <div class="control-toggles">
+            <label>
+              <input type="checkbox" id="sensor-toggle" checked />
+              <span>Enable sensors</span>
+            </label>
+            <label>
+              <input type="checkbox" id="camera-toggle" checked />
+              <span>Enable camera</span>
+            </label>
+            <label>
+              <input type="checkbox" id="motor-toggle" checked />
+              <span>Motor ON/OFF</span>
+            </label>
+          </div>
+          <div class="meter-group">
+            <label for="risk-meter">risk</label>
+            <meter id="risk-meter" min="0" max="1" value="0"></meter>
+            <label for="confidence-meter">confidence</label>
+            <meter id="confidence-meter" min="0" max="1" value="0"></meter>
+            <label for="pressure-meter">finger pressure</label>
+            <meter id="pressure-meter" min="0" max="1" value="0"></meter>
+            <label for="pain-meter">pain</label>
+            <meter id="pain-meter" min="0" max="1" value="0"></meter>
+            <p id="sensor-state">Sensors: clear</p>
+          </div>
+          <div class="memory-actions" aria-label="Memory controls">
+            <button type="button" id="reset-memory">Reset</button>
+            <button type="button" id="export-memory">Export</button>
+            <button type="button" id="replay-contact">Replay</button>
+          </div>
+          <p id="memory-state">Memory: persisted locally</p>
+          <div class="memory-list" id="memory-list"></div>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="/src/ui/main.js"></script>
+  </body>
+</html>

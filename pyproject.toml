@@ -1,0 +1,18 @@
+[project]
+name = "limb-yolo-memory"
+version = "0.1.0"
+description = "Simulation-first YOLO cue encoder, spiking trace, memory retrieval, and motor primitive selector."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+yolo = [
+    "ultralytics>=8.3",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
