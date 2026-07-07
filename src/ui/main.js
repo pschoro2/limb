@@ -106,6 +106,28 @@ const PHYSICS = Object.freeze({
   collisionEps: 1e-3,
   characterStep: 1 / 60,
 });
+const WALL = Object.freeze({
+  positionX: 0.02,
+  positionZ: 0,
+  brickLength: 0.62,
+  brickHeight: 0.24,
+  brickDepth: 0.18,
+  numBricksLength: 6,
+  numBricksHeight: 8,
+  baseYOffset: 0.03,
+  healthPerBrick: 1,
+  color: 0x6f5238,
+  restitution: 0.01,
+  sourceTag: "sim-wall",
+});
+const GUN = Object.freeze({
+  fireCooldown: 0.22,
+  bulletSpeed: 11.8,
+  bulletRadius: 0.055,
+  bulletLifeSeconds: 3.2,
+  maxRange: 5.8,
+  outOfBoundsPad: 0.9,
+});
 const LIMB = Object.freeze({
   mass: 16,
   damping: 0.84,
@@ -261,9 +283,35 @@ const objectSpecs = [
 ];
 
 const draggableObjects = [];
+const wallState = {
+  group: null,
+  pieces: [],
+};
+const projectiles = [];
 const depthHistory = new Map();
 const contactLearningState = new Map();
 const uiTextCache = new Map();
+const gunState = {
+  cooldown: 0,
+};
+const projectileScratch = {
+  position: new THREE.Vector3(),
+  direction: new THREE.Vector3(),
+  forward: new THREE.Vector3(0, 0, 1),
+  muzzlePosition: new THREE.Vector3(),
+  muzzleQuaternion: new THREE.Quaternion(),
+  hitPoint: new THREE.Vector3(),
+  wallTarget: new THREE.Vector3(),
+};
+const gunVisual = {
+  bulletGeometry: new THREE.SphereGeometry(0.055, 10, 8),
+  bulletMaterial: new THREE.MeshStandardMaterial({
+    color: 0x92ff8d,
+    emissive: 0x205b2a,
+    roughness: 0.22,
+    metalness: 0.15,
+  }),
+};
 let sensorsEnabled = true;
 let cameraEnabled = true;
 let motorEnabled = true;
@@ -410,6 +458,9 @@ window.limbSimDebug = {
       },
     };
   },
+  wallPiecesRemaining: () => wallState.pieces.length,
+  projectiles: () => projectiles.length,
+  canFire: () => gunState.cooldown <= 0,
   sceneRenderableSummary: () => {
     const objects = [];
     const bounds = new THREE.Box3();
@@ -453,6 +504,7 @@ canvas.addEventListener("pointermove", onPointerMove);
 canvas.addEventListener("pointerup", onPointerUp);
 canvas.addEventListener("pointercancel", onPointerUp);
 canvas.addEventListener("wheel", onPointerWheel, { passive: false });
+window.addEventListener("keydown", onGlobalKeyDown);
 resetMemoryButton?.addEventListener("click", () => resetLearnedMemory());
 exportMemoryButton?.addEventListener("click", () => exportLearnedMemory());
 replayContactButton?.addEventListener("click", () => replayLastContact());
@@ -524,6 +576,72 @@ function setupScene() {
   limbPad.receiveShadow = true;
   limbPad.userData.physics = { mass: 0, restitution: 0.02 };
   scene.add(limbPad);
+
+  createWall();
+}
+
+function createWall() {
+  const wallGroup = new THREE.Group();
+  wallGroup.name = "center-wall";
+  wallGroup.position.set(WALL.positionX, 0, WALL.positionZ);
+  wallState.group = wallGroup;
+  wallState.pieces.length = 0;
+
+  const wallMaterial = new THREE.MeshStandardMaterial({
+    color: WALL.color,
+    roughness: 0.61,
+    metalness: 0.08,
+  });
+  const startZ = -WALL.numBricksLength * WALL.brickLength * 0.5;
+  const rowY = worldBounds.floorY + WALL.baseYOffset + WALL.brickHeight * 0.5;
+
+  for (let row = 0; row < WALL.numBricksHeight; row += 1) {
+    const localY = rowY + row * WALL.brickHeight;
+    const oddRow = (row % 2) === 1;
+    let localZ = startZ;
+    const bricksThisRow = oddRow ? WALL.numBricksLength + 1 : WALL.numBricksLength;
+
+    if (oddRow) {
+      localZ -= WALL.brickLength * 0.25;
+    }
+
+    for (let column = 0; column < bricksThisRow; column += 1) {
+      let brickLength = WALL.brickLength;
+      let brickHealth = WALL.healthPerBrick;
+      if (oddRow && (column === 0 || column === bricksThisRow - 1)) {
+        brickLength *= 0.5;
+        brickHealth = WALL.healthPerBrick;
+      }
+
+      const brick = new THREE.Mesh(
+        new THREE.BoxGeometry(WALL.brickDepth, WALL.brickHeight, brickLength),
+        wallMaterial,
+      );
+      if (oddRow && (column === 0 || column === bricksThisRow - 1)) {
+        localZ += 0.75 * WALL.brickLength;
+      } else {
+        localZ += WALL.brickLength;
+      }
+      brick.position.set(0, localY, localZ - WALL.brickLength * 0.5);
+      brick.castShadow = true;
+      brick.receiveShadow = true;
+      brick.userData.source = WALL.sourceTag;
+      brick.userData.physics = {
+        mass: 0,
+        restitution: WALL.restitution,
+      };
+
+      wallState.pieces.push({
+        mesh: brick,
+        health: brickHealth,
+        bounds: new THREE.Box3(),
+      });
+      wallGroup.add(brick);
+    }
+  }
+
+  wallGroup.userData.source = WALL.sourceTag;
+  scene.add(wallGroup);
 }
 
 function purgeUnexpectedCenterDividerArtifacts() {
@@ -686,12 +804,40 @@ function createLimb() {
   hand.add(palmSensor);
   sensorMeshes.push(palmSensor);
 
+  const gun = new THREE.Group();
+  gun.position.set(-0.5, -0.05, 0.04);
+  hand.add(gun);
+
+  const gunBody = new THREE.Mesh(
+    new THREE.BoxGeometry(0.2, 0.12, 0.18),
+    new THREE.MeshStandardMaterial({ color: 0x3d4750, roughness: 0.32, metalness: 0.4 }),
+  );
+  gunBody.castShadow = true;
+  gunBody.position.set(-0.12, 0.03, -0.01);
+  gun.add(gunBody);
+
+  const barrel = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.028, 0.028, 0.34, 12),
+    new THREE.MeshStandardMaterial({ color: 0x56657b, roughness: 0.28, metalness: 0.46 }),
+  );
+  barrel.rotation.z = Math.PI / 2;
+  barrel.position.set(-0.26, 0.03, -0.01);
+  barrel.castShadow = true;
+  gun.add(barrel);
+
+  const muzzle = new THREE.Object3D();
+  muzzle.position.set(-0.46, 0.03, -0.01);
+  muzzle.rotation.y = -Math.PI / 2;
+  gun.add(muzzle);
+
   return {
     group,
     shoulder,
     elbow,
     hand,
     sensors: sensorMeshes,
+    gun,
+    muzzle,
     colliders,
     reactionOffset: new THREE.Vector3(),
     reactionVelocity: new THREE.Vector3(),
@@ -1006,6 +1152,14 @@ function onPointerDown(event) {
   dragOffset.copy(selected.group.position).sub(planeHit);
 }
 
+function onGlobalKeyDown(event) {
+  if (event.code === "Space" || event.code === "KeyF") {
+    if (event.repeat) return;
+    event.preventDefault();
+    fireProjectile();
+  }
+}
+
 function onPointerMove(event) {
   if (!dragging || event.pointerId !== activePointerId || !selected) return;
   updatePointer(event);
@@ -1057,6 +1211,129 @@ function onPointerWheel(event) {
   selected.dragTarget.y = THREE.MathUtils.clamp(selected.dragTarget.y + lift, dragYLimits.min, dragYLimits.max);
 }
 
+function getWallTargetPoint() {
+  if (!wallState.group) {
+    return null;
+  }
+  projectileScratch.wallTarget.set(
+    WALL.positionX,
+    worldBounds.floorY + WALL.baseYOffset + WALL.brickHeight * (WALL.numBricksHeight * 0.5),
+    WALL.positionZ,
+  );
+  return projectileScratch.wallTarget;
+}
+
+function fireProjectile() {
+  if (gunState.cooldown > 0 || !limb?.muzzle) {
+    return;
+  }
+  const muzzle = limb.muzzle;
+  const start = projectileScratch.muzzlePosition.copy(muzzle.getWorldPosition(new THREE.Vector3()));
+  const direction = projectileScratch.direction;
+  const wallTarget = getWallTargetPoint();
+  if (wallTarget) {
+    direction.subVectors(wallTarget, start);
+  }
+  if (direction.lengthSq() < 1e-6) {
+    direction.copy(projectileScratch.forward).applyQuaternion(
+      projectileScratch.muzzleQuaternion.copy(muzzle.getWorldQuaternion(new THREE.Quaternion())),
+    );
+  }
+  if (!direction.lengthSq()) return;
+  direction.normalize();
+
+  start.addScaledVector(direction, GUN.bulletRadius * 1.8);
+  const bullet = new THREE.Mesh(gunVisual.bulletGeometry, gunVisual.bulletMaterial);
+  bullet.position.copy(start);
+  bullet.castShadow = false;
+  bullet.receiveShadow = false;
+  scene.add(bullet);
+
+  projectiles.push({
+    mesh: bullet,
+    velocity: {
+      x: direction.x * GUN.bulletSpeed,
+      y: direction.y * GUN.bulletSpeed,
+      z: direction.z * GUN.bulletSpeed,
+    },
+    radius: GUN.bulletRadius,
+    range: 0,
+    age: 0,
+    maxAge: GUN.bulletLifeSeconds,
+  });
+  gunState.cooldown = GUN.fireCooldown;
+}
+
+function updateProjectiles(deltaSeconds) {
+  for (let index = projectiles.length - 1; index >= 0; index -= 1) {
+    const projectile = projectiles[index];
+    const velocity = projectile.velocity;
+    projectile.mesh.position.x += velocity.x * deltaSeconds;
+    projectile.mesh.position.y += velocity.y * deltaSeconds;
+    projectile.mesh.position.z += velocity.z * deltaSeconds;
+    projectile.range += GUN.bulletSpeed * deltaSeconds;
+    projectile.age += deltaSeconds;
+
+    if (
+      projectile.age >= projectile.maxAge ||
+      projectile.range >= GUN.maxRange ||
+      isProjectileOutOfBounds(projectile.mesh.position) ||
+      checkProjectileWallHit(projectile)
+    ) {
+      removeProjectile(index);
+    }
+  }
+}
+
+function isProjectileOutOfBounds(position) {
+  return (
+    position.x < worldBounds.minX - GUN.outOfBoundsPad
+    || position.x > worldBounds.maxX + GUN.outOfBoundsPad
+    || position.y < worldBounds.minY - GUN.outOfBoundsPad
+    || position.y > worldBounds.maxY + GUN.outOfBoundsPad
+    || position.z < worldBounds.minZ - GUN.outOfBoundsPad
+    || position.z > worldBounds.maxZ + GUN.outOfBoundsPad
+  );
+}
+
+function checkProjectileWallHit(projectile) {
+  const origin = projectile.mesh.position;
+  for (let index = wallState.pieces.length - 1; index >= 0; index -= 1) {
+    const piece = wallState.pieces[index];
+    piece.bounds.setFromObject(piece.mesh);
+    piece.bounds.clampPoint(origin, projectileScratch.hitPoint);
+    if (origin.distanceTo(projectileScratch.hitPoint) > projectile.radius) continue;
+
+    piece.health -= 1;
+    if (piece.health <= 0) {
+      destroyWallPiece(index);
+    }
+    return true;
+  }
+  return false;
+}
+
+function destroyWallPiece(index) {
+  const piece = wallState.pieces[index];
+  if (!piece) return;
+  wallState.pieces.splice(index, 1);
+  if (piece.mesh.parent) {
+    piece.mesh.parent.remove(piece.mesh);
+  }
+  if (limbPhysics.ready && limbPhysics.engine?.removeMesh) {
+    limbPhysics.engine.removeMesh(piece.mesh);
+  }
+}
+
+function removeProjectile(index) {
+  const projectile = projectiles[index];
+  if (!projectile) return;
+  if (projectile.mesh.parent) {
+    projectile.mesh.parent.remove(projectile.mesh);
+  }
+  projectiles.splice(index, 1);
+}
+
 function updatePointer(event) {
   const rect = canvas.getBoundingClientRect();
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -1082,7 +1359,9 @@ function animate(timeMs) {
   const time = timeMs / 1000;
   const deltaSeconds = lastFrameTime > 0 ? Math.min(0.05, time - lastFrameTime) : 0.016;
   lastFrameTime = time;
+  gunState.cooldown = Math.max(0, gunState.cooldown - deltaSeconds);
   simulatePhysics(deltaSeconds);
+  updateProjectiles(deltaSeconds);
   purgeUnexpectedCenterDividerArtifacts();
   const tracked = selected || nearestObjectToLimb();
   currentSensors = tracked ? readSensorsForItem(tracked, time) : { ...emptySensors };

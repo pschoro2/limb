@@ -338,6 +338,49 @@
 			const tempProj = new THREE.Vector3();
 			const tempTarget = new THREE.Vector3();
 			const tempNormal = new THREE.Vector3();
+			const wallPieces = [];
+			const projectiles = [];
+			const gunState = {
+				cooldown: 0,
+			};
+			const WALL = Object.freeze( {
+				positionX: 0,
+				positionZ: -3.25,
+				brickLength: 0.62,
+				brickHeight: 0.24,
+				brickDepth: 0.18,
+				numBricksLength: 6,
+				numBricksHeight: 8,
+				baseYOffset: 0.03,
+				healthPerBrick: 1,
+				playerBreakPadding: 0.55,
+				color: 0x6f5238,
+			} );
+			const GUN = Object.freeze( {
+				fireCooldown: 0.22,
+				bulletSpeed: 12,
+				bulletRadius: 0.055,
+				bulletLifeSeconds: 4.2,
+				maxRange: 8.8,
+				outOfBoundsPad: 1,
+			} );
+			const gunVisual = {
+				bulletGeometry: new THREE.SphereGeometry( 0.055, 10, 8 ),
+				bulletMaterial: new THREE.MeshStandardMaterial( {
+					color: 0x92ff8d,
+					emissive: 0x205b2a,
+					roughness: 0.22,
+					metalness: 0.15,
+				} ),
+			};
+			const projectileScratch = {
+				muzzlePosition: new THREE.Vector3(),
+				direction: new THREE.Vector3(),
+				hitPoint: new THREE.Vector3(),
+				wallTarget: new THREE.Vector3(),
+				forward: new THREE.Vector3( 0, 0, -1 ),
+			};
+			const wallBreakPadding = new THREE.Vector3( WALL.playerBreakPadding, WALL.playerBreakPadding, WALL.playerBreakPadding );
 
 			init();
 
@@ -390,6 +433,7 @@
 					ground.position.y = - 0.25;
 					ground.userData.physics = { mass: 0 };
 					scene.add( ground );
+					createWall();
 
 				new THREE.TextureLoader().load( './textures/grid.png', function ( texture ) {
 					texture.wrapS = THREE.RepeatWrapping;
@@ -461,10 +505,16 @@
 						return;
 					}
 
-					if ( event.key === 'z' || event.key === 'Z' || event.key === 'ArrowUp' ) movementInputs.forward = 1;
+					if ( event.key === 'z' || event.key === 'Z' || event.key === 'w' || event.key === 'W' || event.key === 'ArrowUp' ) movementInputs.forward = 1;
 					if ( event.key === 's' || event.key === 'S' || event.key === 'ArrowDown' ) movementInputs.forward = - 1;
-					if ( event.key === 'q' || event.key === 'Q' || event.key === 'ArrowLeft' ) movementInputs.right = - 1;
+					if ( event.key === 'q' || event.key === 'Q' || event.key === 'a' || event.key === 'A' || event.key === 'ArrowLeft' ) movementInputs.right = - 1;
 				if ( event.key === 'd' || event.key === 'D' || event.key === 'ArrowRight' ) movementInputs.right = 1;
+
+					if ( event.code === 'Space' || event.code === 'KeyF' ) {
+						event.preventDefault();
+						fireProjectile();
+						return;
+					}
 
 				if ( event.key === 'j' || event.key === 'J' ) eyeInputs.yawLeft = 1;
 				if ( event.key === 'l' || event.key === 'L' ) eyeInputs.yawRight = 1;
@@ -481,9 +531,9 @@
 
 			function onKeyUp( event ) {
 
-				if ( event.key === 'z' || event.key === 'Z' || event.key === 'ArrowUp' ) movementInputs.forward = 0;
+				if ( event.key === 'z' || event.key === 'Z' || event.key === 'w' || event.key === 'W' || event.key === 'ArrowUp' ) movementInputs.forward = 0;
 				if ( event.key === 's' || event.key === 'S' || event.key === 'ArrowDown' ) movementInputs.forward = 0;
-				if ( event.key === 'q' || event.key === 'Q' || event.key === 'ArrowLeft' ) movementInputs.right = 0;
+				if ( event.key === 'q' || event.key === 'Q' || event.key === 'a' || event.key === 'A' || event.key === 'ArrowLeft' ) movementInputs.right = 0;
 				if ( event.key === 'd' || event.key === 'D' || event.key === 'ArrowRight' ) movementInputs.right = 0;
 
 				if ( event.key === 'j' || event.key === 'J' ) eyeInputs.yawLeft = 0;
@@ -736,6 +786,58 @@
 
 			}
 
+			function createWall() {
+
+					const wallMaterial = new THREE.MeshStandardMaterial( {
+						color: WALL.color,
+						roughness: 0.61,
+						metalness: 0.08,
+					} );
+				const startZ = - WALL.numBricksLength * WALL.brickLength * 0.5;
+				const rowY = - 0.25 + WALL.baseYOffset + WALL.brickHeight * 0.5;
+
+				for ( let row = 0; row < WALL.numBricksHeight; row += 1 ) {
+					const localY = rowY + row * WALL.brickHeight;
+					const oddRow = ( row % 2 ) === 1;
+					let localZ = startZ;
+					const bricksThisRow = oddRow ? WALL.numBricksLength + 1 : WALL.numBricksLength;
+
+					if ( oddRow ) {
+						localZ -= WALL.brickLength * 0.25;
+					}
+
+					for ( let column = 0; column < bricksThisRow; column += 1 ) {
+						let brickLength = WALL.brickLength;
+						if ( oddRow && ( column === 0 || column === bricksThisRow - 1 ) ) {
+							brickLength *= 0.5;
+						}
+
+						const brick = new THREE.Mesh( new THREE.BoxGeometry( WALL.brickDepth, WALL.brickHeight, brickLength ), wallMaterial );
+						if ( oddRow && ( column === 0 || column === bricksThisRow - 1 ) ) {
+							localZ += 0.75 * WALL.brickLength;
+						} else {
+							localZ += WALL.brickLength;
+						}
+							brick.position.set(
+								WALL.positionX,
+								localY,
+								WALL.positionZ + localZ - WALL.brickLength * 0.5,
+							);
+							brick.castShadow = true;
+							brick.receiveShadow = true;
+							applyShadowState( brick, true, true );
+							brick.userData.physics = { mass: 0, restitution: 0 };
+							wallPieces.push( {
+								mesh: brick,
+								health: WALL.healthPerBrick,
+								bounds: new THREE.Box3(),
+							} );
+							scene.add( brick );
+						}
+					}
+
+				}
+
 			function addBody( fixed = true ) {
 
 					const geometry = ( fixed ) ? new THREE.BoxGeometry( 1, 1, 1 ) : new THREE.SphereGeometry( 0.25 );
@@ -770,6 +872,148 @@
 					}
 
 				}
+
+			function fireProjectile() {
+				if ( gunState.cooldown > 0 || !eyeCamera ) {
+					return;
+				}
+
+				const muzzle = projectileScratch.muzzlePosition;
+				const direction = projectileScratch.direction;
+				eyeCamera.getWorldPosition( muzzle );
+				projectileScratch.wallTarget.set( WALL.positionX, 0.8, WALL.positionZ );
+				direction.subVectors( projectileScratch.wallTarget, muzzle );
+				if ( direction.lengthSq() < 1e-6 ) {
+					direction.copy( projectileScratch.forward ).applyQuaternion( eyeCamera.getWorldQuaternion( new THREE.Quaternion() ) );
+				}
+				if ( ! direction.lengthSq() ) {
+					return;
+				}
+				direction.normalize();
+
+				const bullet = new THREE.Mesh( gunVisual.bulletGeometry, gunVisual.bulletMaterial );
+				bullet.position.copy( muzzle ).addScaledVector( direction, GUN.bulletRadius * 1.8 );
+				bullet.castShadow = false;
+				bullet.receiveShadow = false;
+				scene.add( bullet );
+
+				projectiles.push( {
+					mesh: bullet,
+					velocity: {
+						x: direction.x * GUN.bulletSpeed,
+						y: direction.y * GUN.bulletSpeed,
+						z: direction.z * GUN.bulletSpeed,
+					},
+					radius: GUN.bulletRadius,
+					range: 0,
+					age: 0,
+				} );
+				gunState.cooldown = GUN.fireCooldown;
+			}
+
+			function updateProjectiles( deltaSeconds ) {
+				for ( let index = projectiles.length - 1; index >= 0; index -= 1 ) {
+					const projectile = projectiles[ index ];
+					const velocity = projectile.velocity;
+					projectile.mesh.position.x += velocity.x * deltaSeconds;
+					projectile.mesh.position.y += velocity.y * deltaSeconds;
+					projectile.mesh.position.z += velocity.z * deltaSeconds;
+					projectile.range += GUN.bulletSpeed * deltaSeconds;
+					projectile.age += deltaSeconds;
+
+					if (
+						projectile.age >= GUN.bulletLifeSeconds ||
+						projectile.range >= GUN.maxRange ||
+						isProjectileOutOfBounds( projectile.mesh.position ) ||
+						checkProjectileWallHit( projectile )
+					) {
+						removeProjectile( index );
+					}
+				}
+			}
+
+			function isProjectileOutOfBounds( position ) {
+				return (
+					position.x < -10 - GUN.outOfBoundsPad ||
+					position.x > 10 + GUN.outOfBoundsPad ||
+					position.y < -2 - GUN.outOfBoundsPad ||
+					position.y > 12 + GUN.outOfBoundsPad ||
+					position.z < -12 - GUN.outOfBoundsPad ||
+					position.z > 12 + GUN.outOfBoundsPad
+				);
+			}
+
+			function checkProjectileWallHit( projectile ) {
+				const origin = projectile.mesh.position;
+				for ( let index = wallPieces.length - 1; index >= 0; index -= 1 ) {
+					const piece = wallPieces[ index ];
+					piece.bounds.setFromObject( piece.mesh );
+					piece.bounds.clampPoint( origin, projectileScratch.hitPoint );
+					if ( origin.distanceTo( projectileScratch.hitPoint ) > projectile.radius ) {
+						continue;
+					}
+					piece.health -= 1;
+					if ( piece.health <= 0 ) {
+						destroyWallPiece( index );
+					}
+					return true;
+				}
+				return false;
+			}
+
+			function breakWallForMovement( moveVector ) {
+				if ( ! moveVector || ! player || ! player.userData.collider ) {
+					return;
+				}
+
+				if ( moveVector.x === 0 && moveVector.y === 0 && moveVector.z === 0 ) {
+					return;
+				}
+
+				const position = player.userData.collider.translation();
+				const targetPosition = tempTarget.set(
+					position.x + moveVector.x,
+					position.y + moveVector.y,
+					position.z + moveVector.z,
+				);
+
+				for ( let index = wallPieces.length - 1; index >= 0; index -= 1 ) {
+					const piece = wallPieces[ index ];
+					piece.bounds.setFromObject( piece.mesh );
+					piece.bounds.expandByVector( wallBreakPadding );
+					if ( piece.bounds.containsPoint( targetPosition ) ) {
+						destroyWallPiece( index );
+					}
+				}
+			}
+
+			function destroyWallPiece( index ) {
+				const piece = wallPieces[ index ];
+				if ( ! piece ) return;
+
+				wallPieces.splice( index, 1 );
+				if ( physics ) {
+					const physicsData = piece.mesh.userData.physics;
+					if ( physicsData?.collider ) {
+						physics.world.removeCollider( physicsData.collider );
+					}
+					if ( physicsData?.body ) {
+						physics.world.removeRigidBody( physicsData.body );
+					}
+				}
+				if ( piece.mesh.parent ) {
+					piece.mesh.parent.remove( piece.mesh );
+				}
+			}
+
+			function removeProjectile( index ) {
+				const projectile = projectiles[ index ];
+				if ( ! projectile ) return;
+				if ( projectile.mesh.parent ) {
+					projectile.mesh.parent.remove( projectile.mesh );
+				}
+				projectiles.splice( index, 1 );
+			}
 
 				function applyShadowState( object, canCast = true, canReceive = false ) {
 
@@ -1015,13 +1259,16 @@
 			}
 
 				function animate() {
+					const deltaTime = 1 / 60;
+					gunState.cooldown = Math.max( 0, gunState.cooldown - deltaTime );
+					updateProjectiles( deltaTime );
 
 				if ( physicsHelper ) physicsHelper.update();
 
 				if ( physics && characterController ) {
-					const deltaTime = 1 / 60;
 					const speed = 2.5 * deltaTime;
 					const moveVector = new physics.RAPIER.Vector3( movementInputs.right * speed, 0, - movementInputs.forward * speed );
+					breakWallForMovement( moveVector );
 					characterController.computeColliderMovement( player.userData.collider, moveVector );
 					const translation = characterController.computedMovement();
 					const position = player.userData.collider.translation();
